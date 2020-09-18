@@ -1,0 +1,18 @@
+# 服务端口
+server:
+  port: 8081
+
+# redis ip 端口
+spring:
+  redis:
+    host: 127.0.0.1
+    port: 6379
+
+# redis聊天topic
+chat:
+  topic: chatTopic
+
+# 日志打印
+logging:
+  level:
+    ROOT: info
