@@ -1,4 +1,4 @@
-package com.example.webflux.websocket;
+package com.example.webflux.util;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;

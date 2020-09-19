@@ -3,9 +3,9 @@ package com.example.webflux.websocket;
 import cn.hutool.http.HttpUtil;
 import com.alibaba.fastjson.JSONObject;
 import com.example.webflux.redis.ChatConfig;
+import com.example.webflux.util.RedisUtil;
 import com.example.webflux.util.SpringContextUtil;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.util.StringUtils;
 import org.springframework.web.reactive.socket.HandshakeInfo;
 import org.springframework.web.reactive.socket.WebSocketHandler;
 import org.springframework.web.reactive.socket.WebSocketSession;
@@ -15,12 +15,11 @@ import reactor.core.publisher.Mono;
 import java.net.InetSocketAddress;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 @Slf4j
 public class ChatHandler implements WebSocketHandler {
-    ConcurrentHashMap<String,Map<String, WebSocketClient>> roomCacheMap = new ConcurrentHashMap<>();
+
+    public static ConcurrentHashMap<String,Map<String, WebSocketClient>> roomCacheMap = new ConcurrentHashMap<>();
 
     @Override
     public Mono<Void> handle(WebSocketSession session) {
@@ -49,17 +48,19 @@ public class ChatHandler implements WebSocketHandler {
                 })
                 .doOnComplete(() -> {
                     log.info("关闭连接：{}", session.getId());
-                    session.close().toProcessor().then();
-                    broadcast(roomName, userId, "退出房间！");
-                    removeUser(roomName, userId);
+                    exitRoom(session, roomName, userId);
                 }).doOnCancel(() -> {
                     log.info("关闭连接：{}", session.getId());
-                    session.close().toProcessor().then();
-                    broadcast(roomName, userId, "退出房间！");
-                    removeUser(roomName, userId);
+                    exitRoom(session, roomName, userId);
                 }).then();
 
         return Mono.zip(input, output).then();
+    }
+
+    private void exitRoom(WebSocketSession session, String roomName, String userId) {
+        session.close().toProcessor().then();
+        broadcast(roomName, userId, "退出房间！");
+        removeUser(roomName, userId);
     }
 
     private void removeUser(String roomName, String userId) {
@@ -97,12 +98,22 @@ public class ChatHandler implements WebSocketHandler {
         msgObj.put("message",message);
 
         ChatConfig chatConfig = SpringContextUtil.getBean(ChatConfig.class);
-        RedisUtil.convertAndSend(chatConfig.getTopic(),message);
+        RedisUtil.convertAndSend(chatConfig.getTopic(),msgObj.toJSONString());
 
+        sendToAll(roomName, userId, message);
+    }
+
+    /**
+     * 发送消息给除了自己的所有用户
+     * @param roomName
+     * @param userId
+     * @param message
+     */
+    public static void sendToAll(String roomName, String userId, String message) {
         Map<String, WebSocketClient> clients = roomCacheMap.get(roomName);
         clients.forEach((user, client) -> {
-            // 发送消息给除了自己的所有用户
             if (!userId.equals(user)) {
+                log.info("用户：{}发送消息：{}",userId,message);
                 client.sendData(userId + "：" + message);
             }
         });
